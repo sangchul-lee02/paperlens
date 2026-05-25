@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaperLens — AI 논문 요약기</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f7f4ef;--paper:#fffef9;--ink:#1c1917;--ink2:#44403c;--ink3:#78716c;
+  --accent:#c2410c;--accent2:#ea580c;--accent-bg:#fff7ed;--accent-border:#fed7aa;
+  --green:#15803d;--green-bg:#f0fdf4;--green-border:#bbf7d0;
+  --border:#e7e5e4;--border2:#d6d3d1;
+  --shadow:0 1px 3px rgba(0,0,0,0.08),0 4px 16px rgba(0,0,0,0.04);
+  --shadow-lg:0 8px 32px rgba(0,0,0,0.10);
+}
+html{scroll-behavior:smooth}
+body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;}
+header{
+  position:sticky;top:0;z-index:100;
+  background:rgba(247,244,239,0.92);backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  padding:0 40px;height:60px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.logo{font-family:'DM Serif Display',serif;font-size:22px;color:var(--ink);display:flex;align-items:center;gap:10px;}
+.logo-accent{color:var(--accent)}
+.logo-tag{font-family:'DM Mono',monospace;font-size:10px;color:var(--ink3);background:var(--border);padding:3px 8px;border-radius:4px;letter-spacing:1px;}
+.header-right{font-family:'DM Mono',monospace;font-size:11px;color:var(--ink3);}
+main{max-width:820px;margin:0 auto;padding:56px 24px 80px;}
+.hero{text-align:center;margin-bottom:52px}
+.hero-eyebrow{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:16px;}
+.hero-title{font-family:'DM Serif Display',serif;font-size:clamp(36px,6vw,58px);line-height:1.1;color:var(--ink);margin-bottom:16px;}
+.hero-title em{color:var(--accent);font-style:italic}
+.hero-desc{font-size:15px;color:var(--ink3);line-height:1.8;max-width:480px;margin:0 auto;}
+.upload-card{
+  background:var(--paper);border:1.5px dashed var(--border2);border-radius:16px;
+  padding:48px 32px;text-align:center;cursor:pointer;transition:all .25s;
+  position:relative;box-shadow:var(--shadow);margin-bottom:24px;
+}
+.upload-card:hover,.upload-card.over{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-2px);box-shadow:var(--shadow-lg);}
+.upload-card input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.upload-icon{width:56px;height:56px;background:var(--accent-bg);border:1.5px solid var(--accent-border);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;margin:0 auto 18px;}
+.upload-title{font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:8px;color:var(--ink);}
+.upload-sub{font-size:13px;color:var(--ink3);line-height:1.6}
+.upload-sub span{font-family:'DM Mono',monospace;font-size:11px;background:var(--border);padding:2px 7px;border-radius:4px;color:var(--ink2);}
+.file-chip{display:none;align-items:center;gap:14px;background:var(--paper);border:1px solid var(--green-border);border-radius:10px;padding:14px 18px;box-shadow:var(--shadow);margin-bottom:24px;}
+.file-chip.show{display:flex}
+.fc-icon{font-size:24px}
+.fc-info{flex:1}
+.fc-name{font-size:14px;font-weight:700;color:var(--ink)}
+.fc-size{font-size:12px;color:var(--ink3);font-family:'DM Mono',monospace;}
+.fc-remove{background:none;border:none;color:var(--ink3);cursor:pointer;font-size:18px;line-height:1;transition:color .2s;padding:4px;}
+.fc-remove:hover{color:var(--accent)}
+.analyze-btn{
+  width:100%;padding:16px;background:var(--accent);color:#fff;border:none;border-radius:10px;
+  font-family:'DM Serif Display',serif;font-size:18px;cursor:pointer;transition:all .25s;
+  display:flex;align-items:center;justify-content:center;gap:10px;
+  box-shadow:0 2px 8px rgba(194,65,12,0.25);margin-bottom:24px;
+}
+.analyze-btn:hover{background:var(--accent2);transform:translateY(-1px);}
+.analyze-btn:disabled{background:var(--border2);color:var(--ink3);cursor:not-allowed;transform:none;box-shadow:none;}
+.loading-box{display:none;background:var(--paper);border:1px solid var(--border);border-radius:16px;padding:40px;text-align:center;box-shadow:var(--shadow);margin-bottom:24px;}
+.loading-box.show{display:block}
+.loader{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 18px;}
+.loading-title{font-family:'DM Serif Display',serif;font-size:20px;margin-bottom:6px;}
+.loading-step{font-family:'DM Mono',monospace;font-size:12px;color:var(--ink3);min-height:18px;}
+.loading-bar-bg{background:var(--border);border-radius:4px;height:3px;margin-top:20px;overflow:hidden;}
+.loading-bar{height:100%;background:var(--accent);border-radius:4px;width:0;transition:width .4s ease;}
+.result-box{display:none}
+.result-box.show{display:block;animation:fadeUp .4s ease both}
+.result-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap;}
+.result-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;color:var(--accent);text-transform:uppercase;margin-bottom:6px;}
+.result-paper-title{font-family:'DM Serif Display',serif;font-size:22px;line-height:1.3;color:var(--ink);max-width:560px;}
+.copy-all-btn{flex-shrink:0;background:var(--ink);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;letter-spacing:0.5px;transition:all .2s;display:flex;align-items:center;gap:6px;}
+.copy-all-btn:hover{background:var(--ink2)}
+.cards-grid{display:grid;gap:16px;}
+.r-card{background:var(--paper);border:1px solid var(--border);border-radius:14px;padding:24px 28px;box-shadow:var(--shadow);animation:fadeUp .4s ease both;}
+.r-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.r-card-label{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;color:var(--ink3);display:flex;align-items:center;gap:7px;}
+.r-card-label .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;}
+.copy-btn{background:none;border:1px solid var(--border);color:var(--ink3);font-size:11px;font-weight:700;padding:4px 12px;border-radius:6px;cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:0.5px;transition:all .2s;}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.r-body{font-size:14px;line-height:1.85;color:var(--ink2);}
+.keyword-cloud{display:flex;flex-wrap:wrap;gap:8px;}
+.kw{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;padding:5px 14px;border-radius:6px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);transition:all .2s;cursor:default;}
+.kw:hover{background:var(--accent);color:#fff}
+.kw.secondary{background:var(--bg);color:var(--ink3);border-color:var(--border);}
+.kw.secondary:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+.meta-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:16px;}
+.meta-chip{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;}
+.meta-chip-val{font-family:'DM Serif Display',serif;font-size:20px;color:var(--accent);margin-bottom:4px;}
+.meta-chip-label{font-family:'DM Mono',monospace;font-size:10px;color:var(--ink3);letter-spacing:1px;text-transform:uppercase;}
+.highlight-quote{border-left:3px solid var(--accent);padding:14px 18px;background:var(--accent-bg);border-radius:0 8px 8px 0;font-size:14px;color:var(--ink2);line-height:1.8;margin-top:12px;font-style:italic;}
+.reset-btn{width:100%;margin-top:24px;background:none;border:1.5px solid var(--border2);color:var(--ink3);padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans KR',sans-serif;transition:all .2s;}
+.reset-btn:hover{border-color:var(--ink);color:var(--ink)}
+footer{text-align:center;padding:32px;font-family:'DM Mono',monospace;font-size:11px;color:var(--ink3);border-top:1px solid var(--border);letter-spacing:0.5px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+.delay1{animation-delay:.08s}.delay2{animation-delay:.16s}.delay3{animation-delay:.24s}.delay4{animation-delay:.32s}
+.toast{position:fixed;bottom:28px;right:28px;z-index:999;background:var(--ink);color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:700;font-family:'Noto Sans KR',sans-serif;box-shadow:var(--shadow-lg);transform:translateY(80px);opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);}
+.toast.show{transform:translateY(0);opacity:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Paper<span class="logo-accent">Lens</span><span class="logo-tag">AI SUMMARIZER</span></div>
+  <div class="header-right">PDF → 요약 + 키워드 + 방법론</div>
+</header>
+<main>
+  <div class="hero">
+    <div class="hero-eyebrow">Powered by Gemini 2.5 Flash Lite</div>
+    <h1 class="hero-title">논문을 <em>30초</em>에<br>핵심만 뽑아드립니다</h1>
+    <p class="hero-desc">PDF를 업로드하면 AI가 핵심 요약, 연구 방법론, 주요 키워드를 자동으로 추출합니다.</p>
+  </div>
+
+  <div class="upload-card" id="uploadZone">
+    <input type="file" accept=".pdf" id="pdfInput" onchange="handleFile(this.files[0])">
+    <div class="upload-icon">📄</div>
+    <div class="upload-title">논문 PDF를 여기에 드래그하거나 클릭</div>
+    <div class="upload-sub"><span>.pdf</span> 형식 지원 · 최대 20MB · 학술 논문 전 분야</div>
+  </div>
+
+  <div class="file-chip" id="fileChip">
+    <div class="fc-icon">📑</div>
+    <div class="fc-info">
+      <div class="fc-name" id="fcName"></div>
+      <div class="fc-size" id="fcSize"></div>
+    </div>
+    <button class="fc-remove" onclick="resetApp()">✕</button>
+  </div>
+
+  <button class="analyze-btn" id="analyzeBtn" onclick="startAnalysis()" disabled>
+    <span>🔍</span> 논문 분석 시작
+  </button>
+
+  <div class="loading-box" id="loadingBox">
+    <div class="loader"></div>
+    <div class="loading-title">분석하는 중...</div>
+    <div class="loading-step" id="loadingStep">PDF 텍스트 추출 중</div>
+    <div class="loading-bar-bg"><div class="loading-bar" id="loadingBar"></div></div>
+  </div>
+
+  <div class="result-box" id="resultBox">
+    <div class="result-header">
+      <div>
+        <div class="result-label">분석 완료</div>
+        <div class="result-paper-title" id="rTitle">—</div>
+      </div>
+      <button class="copy-all-btn" onclick="copyAll()">📋 전체 복사</button>
+    </div>
+    <div class="cards-grid">
+      <div class="r-card">
+        <div class="r-card-head">
+          <div class="r-card-label"><span class="dot"></span>핵심 요약</div>
+          <button class="copy-btn" onclick="copyCard('summary')">복사</button>
+        </div>
+        <div class="r-body" id="rSummary"></div>
+      </div>
+      <div class="r-card delay1">
+        <div class="r-card-head">
+          <div class="r-card-label"><span class="dot"></span>연구 목적 / 문제 제기</div>
+          <button class="copy-btn" onclick="copyCard('purpose')">복사</button>
+        </div>
+        <div class="r-body" id="rPurpose"></div>
+      </div>
+      <div class="r-card delay2">
+        <div class="r-card-head">
+          <div class="r-card-label"><span class="dot"></span>연구 방법론</div>
+          <button class="copy-btn" onclick="copyCard('method')">복사</button>
+        </div>
+        <div class="r-body" id="rMethod"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px" id="rMethodTags"></div>
+      </div>
+      <div class="r-card delay3">
+        <div class="r-card-head">
+          <div class="r-card-label"><span class="dot"></span>주요 결론</div>
+          <button class="copy-btn" onclick="copyCard('conclusion')">복사</button>
+        </div>
+        <div class="r-body" id="rConclusion"></div>
+        <div class="highlight-quote" id="rQuote"></div>
+      </div>
+      <div class="r-card delay3">
+        <div class="r-card-head">
+          <div class="r-card-label"><span class="dot"></span>논문 정보</div>
+        </div>
+        <div class="meta-row" id="rMeta"></div>
+      </div>
+      <div class="r-card delay4">
+        <div class="r-card-head">
+          <div class="r-card-label"><span class="dot"></span>핵심 키워드</div>
+          <button class="copy-btn" onclick="copyCard('keywords')">복사</button>
+        </div>
+        <div class="keyword-cloud" id="rKeywords"></div>
+      </div>
+    </div>
+    <button class="reset-btn" onclick="resetApp()">↩ 새 논문 분석하기</button>
+  </div>
+</main>
+<footer>PaperLens · AI 논문 요약기 · Powered by Gemini 2.5 Flash Lite · 생성형 AI 활용 과제</footer>
+<div class="toast" id="toast"></div>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ★ 여기에 Gemini API 키 입력 ★
+const GEMINI_API_KEY = 'AIzaSyAA3k_AhX7N3EZM7mcbr1hr5nzDR-rNxj4';
+
+let pdfText = '';
+
+const uz = document.getElementById('uploadZone');
+uz.addEventListener('dragover', e => { e.preventDefault(); uz.classList.add('over'); });
+uz.addEventListener('dragleave', () => uz.classList.remove('over'));
+uz.addEventListener('drop', e => {
+  e.preventDefault(); uz.classList.remove('over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
+});
+
+function handleFile(file) {
+  if (!file || file.type !== 'application/pdf') {
+    showToast('❌ PDF 파일만 업로드할 수 있습니다'); return;
+  }
+  document.getElementById('fcName').textContent = file.name;
+  document.getElementById('fcSize').textContent = (file.size/1024/1024).toFixed(2) + ' MB';
+  document.getElementById('fileChip').classList.add('show');
+  document.getElementById('uploadZone').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = false;
+  window._pdfFile = file;
+}
+
+async function startAnalysis() {
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('loadingBox').classList.add('show');
+  document.getElementById('resultBox').classList.remove('show');
+  setStep('PDF 텍스트 추출 중...', 10);
+  try {
+    const ab = await window._pdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+    let text = '';
+    const maxPages = Math.min(pdf.numPages, 14);
+    for (let i = 1; i <= maxPages; i++) {
+      const page = await pdf.getPage(i);
+      const tc = await page.getTextContent();
+      text += tc.items.map(it => it.str).join(' ') + '\n';
+      setStep('페이지 읽는 중 (' + i + '/' + maxPages + ')...', 10 + Math.round((i/maxPages)*40));
+    }
+    pdfText = text.trim();
+    setStep('Gemini AI 분석 중...', 55);
+    await callAI(pdfText);
+  } catch(e) {
+    document.getElementById('loadingBox').classList.remove('show');
+    document.getElementById('analyzeBtn').disabled = false;
+    showToast('❌ 오류: ' + e.message);
+  }
+}
+
+function setStep(msg, pct) {
+  document.getElementById('loadingStep').textContent = msg;
+  document.getElementById('loadingBar').style.width = (pct||0) + '%';
+}
+
+async function callAI(text) {
+  const truncated = text.slice(0, 7000);
+  const prompt = '당신은 학술 논문 분석 전문가입니다. 아래 논문 텍스트를 읽고 반드시 JSON만 반환하세요. 마크다운 코드블록, 설명 텍스트 없이 순수 JSON만 출력하세요.\n\n논문 텍스트:\n' + truncated + '\n\n반환 JSON 형식:\n{"title":"논문 제목","authors":"저자","year":"출판연도","field":"연구 분야","summary":"핵심 내용 3-4문장 한국어 요약","purpose":"연구 목적 2-3문장","methodology":"연구 방법론 2-3문장 (실험설계, 데이터수집, 분석기법 등)","methodTags":["방법론태그1","태그2","태그3"],"conclusion":"주요 결론 2-3문장","keyQuote":"가장 중요한 발견 한 문장 한국어","primaryKeywords":["키워드1","키워드2","키워드3","키워드4","키워드5"],"secondaryKeywords":["키워드1","키워드2","키워드3","키워드4","키워드5"]}';
+
+  try {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=' + GEMINI_API_KEY;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 1200 }
+      })
+    });
+    setStep('결과 처리 중...', 90);
+    const data = await res.json();
+    console.log('Gemini 응답:', data);
+    if (data.error) {
+      showToast('❌ API 오류: ' + data.error.message);
+      document.getElementById('loadingBox').classList.remove('show');
+      document.getElementById('analyzeBtn').disabled = false;
+      return;
+    }
+    const raw = data.candidates[0].content.parts[0].text;
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(cleaned);
+    setStep('완료!', 100);
+    setTimeout(() => renderResult(parsed), 300);
+  } catch(e) {
+    console.error('오류:', e);
+    showToast('❌ API 호출 실패: ' + e.message);
+    document.getElementById('loadingBox').classList.remove('show');
+    document.getElementById('analyzeBtn').disabled = false;
+  }
+}
+
+function renderResult(d) {
+  document.getElementById('loadingBox').classList.remove('show');
+  document.getElementById('resultBox').classList.add('show');
+  document.getElementById('rTitle').textContent = d.title || '—';
+  document.getElementById('rSummary').innerHTML = d.summary || '—';
+  document.getElementById('rPurpose').innerHTML = d.purpose || '—';
+  document.getElementById('rMethod').innerHTML = d.methodology || '—';
+  const mtc = document.getElementById('rMethodTags');
+  mtc.innerHTML = '';
+  (d.methodTags||[]).forEach(t => {
+    const s = document.createElement('span');
+    s.className = 'kw'; s.textContent = t; mtc.appendChild(s);
+  });
+  document.getElementById('rConclusion').innerHTML = d.conclusion || '—';
+  document.getElementById('rQuote').textContent = d.keyQuote ? '"' + d.keyQuote + '"' : '';
+  document.getElementById('rMeta').innerHTML =
+    '<div class="meta-chip"><div class="meta-chip-val">' + (d.year||'—') + '</div><div class="meta-chip-label">출판 연도</div></div>' +
+    '<div class="meta-chip"><div class="meta-chip-val">' + (d.field||'—') + '</div><div class="meta-chip-label">연구 분야</div></div>' +
+    '<div class="meta-chip"><div class="meta-chip-val">' + (d.authors ? d.authors.split(',')[0].trim() + (d.authors.includes(',') ? ' 외' : '') : '—') + '</div><div class="meta-chip-label">저자</div></div>';
+  const kc = document.getElementById('rKeywords');
+  kc.innerHTML = '';
+  (d.primaryKeywords||[]).forEach(k => {
+    const s = document.createElement('span'); s.className = 'kw'; s.textContent = k; kc.appendChild(s);
+  });
+  (d.secondaryKeywords||[]).forEach(k => {
+    const s = document.createElement('span'); s.className = 'kw secondary'; s.textContent = k; kc.appendChild(s);
+  });
+  window._result = d;
+  document.getElementById('resultBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function copyCard(type) {
+  const d = window._result; if (!d) return;
+  let text = '';
+  if (type === 'summary') text = '[핵심 요약]\n' + d.summary;
+  else if (type === 'purpose') text = '[연구 목적]\n' + d.purpose;
+  else if (type === 'method') text = '[연구 방법론]\n' + d.methodology + '\n\n방법: ' + (d.methodTags||[]).join(', ');
+  else if (type === 'conclusion') text = '[주요 결론]\n' + d.conclusion + '\n\n"' + d.keyQuote + '"';
+  else if (type === 'keywords') text = '[핵심 키워드]\n' + (d.primaryKeywords||[]).join(', ') + '\n\n[부가 키워드]\n' + (d.secondaryKeywords||[]).join(', ');
+  navigator.clipboard.writeText(text).then(() => showToast('✅ 복사됐습니다!'));
+}
+
+function copyAll() {
+  const d = window._result; if (!d) return;
+  const text = '📄 ' + d.title + '\n저자: ' + d.authors + ' | 연도: ' + d.year + ' | 분야: ' + d.field +
+    '\n\n【핵심 요약】\n' + d.summary +
+    '\n\n【연구 목적】\n' + d.purpose +
+    '\n\n【연구 방법론】\n' + d.methodology + '\n방법: ' + (d.methodTags||[]).join(' · ') +
+    '\n\n【주요 결론】\n' + d.conclusion +
+    '\n\n"' + d.keyQuote + '"' +
+    '\n\n【핵심 키워드】\n' + (d.primaryKeywords||[]).join(' · ') +
+    '\n\n【부가 키워드】\n' + (d.secondaryKeywords||[]).join(' · ');
+  navigator.clipboard.writeText(text).then(() => showToast('✅ 전체 내용이 복사됐습니다!'));
+}
+
+function resetApp() {
+  pdfText = ''; window._pdfFile = null; window._result = null;
+  document.getElementById('pdfInput').value = '';
+  document.getElementById('fileChip').classList.remove('show');
+  document.getElementById('uploadZone').style.display = 'block';
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('loadingBox').classList.remove('show');
+  document.getElementById('resultBox').classList.remove('show');
+  document.getElementById('loadingBar').style.width = '0';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
